@@ -44,10 +44,10 @@ class MonitoringAgent:
         """Parse logs based on paths from backend"""
         projects = self.get_log_paths_from_backend()
         print(projects)
-        log_paths = [(project.get("framework_type"),project.get("log_path")) for project in projects]
+        log_paths = [(project.get("framework_type"),project.get("log_path"),project.get("id")) for project in projects]
         parsed_logs = {}
         HOME = Path.home()
-        for log_type, path in log_paths:
+        for log_type, path,project_id in log_paths:
             logger.info(f"Parsing {log_type} log from: {path}")
             if path and log_type:
                 path_obj = Path(path)
@@ -56,7 +56,7 @@ class MonitoringAgent:
                 entries = self.log_parser.parse_log_file(str(full_path), log_type)
             else:
                 entries = []
-            parsed_logs[log_type] = entries
+            parsed_logs[f"{log_type}_{project_id}"] = entries
             logger.info(f"Parsed {len(entries)} entries from {log_type} log")
             
         return parsed_logs
