@@ -5,7 +5,7 @@ Handles log parsing, system monitoring, and service monitoring
 """
 
 import logging
-from .core.agent import MonitoringAgent
+from core.monitor_agent import MonitoringAgent
 import time
 
 # Configure logging

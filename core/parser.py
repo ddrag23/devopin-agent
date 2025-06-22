@@ -2,7 +2,7 @@ import re
 import logging
 import os
 from typing import Optional,List
-from ..models.data_classes import LogEntry
+from models.data_classes import LogEntry
 logger = logging.getLogger(__name__)
 
 class LogParser:

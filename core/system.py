@@ -1,7 +1,7 @@
 import psutil
 import os
 from datetime import datetime
-from ..models.data_classes import SystemMetrics 
+from models.data_classes import SystemMetrics 
 class SystemMonitor:
     """Handles system monitoring using psutil"""
     

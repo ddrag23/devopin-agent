@@ -1,7 +1,7 @@
-from .parser import LogParser
-from .system import SystemMonitor
-from .service import ServiceMonitor
-from ..models.data_classes import LogEntry,ServiceStatus,SystemMetrics
+from core.parser import LogParser
+from core.system import SystemMonitor
+from core.service import ServiceMonitor
+from models.data_classes import LogEntry,ServiceStatus,SystemMetrics
 from typing import List,Dict,Any
 import logging
 import requests

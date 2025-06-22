@@ -2,7 +2,7 @@ import subprocess
 import re
 import logging
 from typing import Optional,List
-from ..models.data_classes import ServiceStatus
+from models.data_classes import ServiceStatus
 logger = logging.getLogger(__name__)
 
 class ServiceMonitor:
