@@ -1,6 +1,7 @@
 import re
 import logging
 import os
+import glob
 from typing import Optional,List
 from models.data_classes import LogEntry
 logger = logging.getLogger(__name__)
@@ -140,35 +141,43 @@ class LogParser:
         return controller, line_number, file_path
 
     def parse_log_file(self, file_path: str, log_type: str) -> List[LogEntry]:
-        """Parse entire log file based on type"""
-        if not os.path.exists(file_path):
-            logger.error(f"Log file not found: {file_path}")
-            return []
-            
+        """Parse log file or directory containing logs"""
         entries = []
+
         parser_map = {
             'laravel': self.parse_laravel_log,
             'python': self.parse_python_log,
             'nodejs': self.parse_nodejs_log
         }
-        
+
         parser = parser_map.get(log_type.lower())
         if not parser:
             logger.error(f"Unsupported log type: {log_type}")
             return []
-        
-        try:
-            last_offset = self._load_offset(file_path)
-            with open(file_path, 'r', encoding='utf-8') as f:
-                f.seek(last_offset)
-                for line in f:
-                    if line.strip():
-                        entry = parser(line)
-                        if entry:
-                            entries.append(entry)
-                self._save_offset(file_path, f.tell())  # Simpan posisi terakhir
-        except Exception as e:
-            logger.error(f"Error parsing log file {file_path}: {e}")
+
+        # Jika file_path adalah folder
+        if os.path.isdir(file_path):
+            log_files = sorted(glob.glob(os.path.join(file_path, '*.log')))
+        elif os.path.isfile(file_path):
+            log_files = [file_path]
+        else:
+            logger.error(f"Log file or directory not found: {file_path}")
+            return []
+
+        for log_file in log_files:
+            try:
+                last_offset = self._load_offset(log_file)
+                with open(log_file, 'r', encoding='utf-8') as f:
+                    f.seek(last_offset)
+                    for line in f:
+                        if line.strip():
+                            entry = parser(line)
+                            if entry:
+                                entries.append(entry)
+                    self._save_offset(log_file, f.tell())  # Simpan posisi terakhir
+            except Exception as e:
+                logger.error(f"Error parsing log file {log_file}: {e}")
+
         return entries
     
     def _get_offset_file(self, log_file: str) -> str:
@@ -181,7 +190,7 @@ class LogParser:
             with open(offset_path, 'r') as f:
                 try:
                     return int(f.read())
-                except:
+                except Exception:
                     return 0
         return 0
 
