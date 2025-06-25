@@ -7,6 +7,7 @@ Handles log parsing, system monitoring, and service monitoring
 import logging
 from core.monitor_agent import MonitoringAgent
 import time
+from core.config import load_config
 
 # Configure logging
 logging.basicConfig(
@@ -22,7 +23,11 @@ logger = logging.getLogger(__name__)
 def main():
     """Main function to run the monitoring agent"""
     # Configuration
-    BACKEND_URL = "http://localhost:8080"  # Ganti dengan URL backend Anda
+    config = load_config()
+    if not config:
+        logger.error("Failed to load configuration. Exiting.")
+        return
+    BACKEND_URL = config['backend_url']  # Ganti dengan URL backend Anda
     SERVICES_TO_MONITOR = [
         'nginx',
         'apache2', 
@@ -32,7 +37,7 @@ def main():
         'docker',
         'ssh'
     ]
-    MONITORING_INTERVAL = 60  # seconds
+    MONITORING_INTERVAL = config['setting']['monitoring_interval']  # seconds
     
     # Initialize agent
     agent = MonitoringAgent(backend_url=BACKEND_URL)

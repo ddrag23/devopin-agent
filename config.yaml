@@ -1,0 +1,10 @@
+backend_url: "http://localhost:8080"
+setting:
+  monitoring_interval: 60
+  # smpt: #coming soon
+  #   host: "smtp.example.com"
+  #   port: 587
+  #   username:
+  #   password: "your_password"
+  #   use_tls: true
+  #   email_from:
