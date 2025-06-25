@@ -19,8 +19,8 @@ class LogParser:
             re.DOTALL
         )
         
-        # Python log pattern (Django/Flask)
-        self.python_pattern = re.compile(
+        # django_flask log pattern (Django/Flask)
+        self.django_flask = re.compile(
             r'(?P<timestamp>\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}[,.]?\d*)\s+'
             r'(?P<level>\w+)\s+'
             r'(?P<message>.*?)(?:\s+\[(?P<file>.*?):(?P<line>\d+)\])?'
@@ -32,6 +32,13 @@ class LogParser:
             r'(?P<level>\w+):\s+'
             r'(?P<message>.*?)(?:\s+at\s+(?P<controller>.*?)\s+\((?P<file>.*?):(?P<line>\d+):\d+\))?'
         )
+        
+        self.python_pattern = re.compile(
+            r'(?P<timestamp>\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2}[.,]?\d*)\s*-\s*'
+            r'(?P<level>\w+)\s*-\s*'
+            r'(?P<message>.+)'
+        )
+
         
         # Generic error patterns for extracting controller/file info
         self.controller_patterns = [
@@ -63,9 +70,9 @@ class LogParser:
             file_path=file_path
         )
 
-    def parse_python_log(self, log_line: str) -> Optional[LogEntry]:
-        """Parse Python (Django/Flask) log format"""
-        match = self.python_pattern.match(log_line.strip())
+    def parse_django_flask_log(self, log_line: str) -> Optional[LogEntry]:
+        """Parse django_flask (Django/Flask) log format"""
+        match = self.django_flask.match(log_line.strip())
         if not match:
             return None
             
@@ -98,11 +105,22 @@ class LogParser:
             line_number=data.get('line'),
             file_path=data.get('file')
         )
+    def parse_python_log(self, line: str) -> Optional[LogEntry]:
+        match = self.python_pattern.match(line)
+        if not match:
+            return None
+        data = match.groupdict()
+        return LogEntry(
+            timestamp=data['timestamp'],
+            level=data['level'].upper(),
+            message=data['message'],
+        )
+
 
     def _extract_error_location(self, message: str) -> tuple:
         """
         Extract controller/class/function, line number, and file path
-        from Laravel, Python, and Node.js logs.
+        from Laravel, django_flask, and Node.js logs.
         """
         controller = None
         line_number = None
@@ -115,7 +133,7 @@ class LogParser:
             # Laravel: UserController::method() at /path/file.php:123
             re.compile(r'(?P<controller>\w+Controller)::\w+\(.*?\).*?at (?P<file>/[^\s]+):(?P<line>\d+)'),
 
-            # Python style
+            # django_flask style
             re.compile(r'File "(?P<file>[^"]+)", line (?P<line>\d+)(?:, in (?P<controller>\w+))?'),
 
             # Node.js
@@ -146,8 +164,10 @@ class LogParser:
 
         parser_map = {
             'laravel': self.parse_laravel_log,
-            'python': self.parse_python_log,
-            'nodejs': self.parse_nodejs_log
+            'django': self.parse_django_flask_log,
+            'flask': self.parse_django_flask_log,
+            'nodejs': self.parse_nodejs_log,
+            'python':self.parse_python_log,
         }
 
         parser = parser_map.get(log_type.lower())
