@@ -113,8 +113,7 @@ class MonitoringAgent:
         system_metrics = self.monitor_system()
         
         # Monitor services
-        # service_statuses = self.monitor_services(services_to_monitor)
-        service_statuses = []
+        service_statuses = self.monitor_services(services_to_monitor)
         
         # Prepare data for backend
         monitoring_data = {

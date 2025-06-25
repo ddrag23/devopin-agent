@@ -33,9 +33,6 @@ def main():
         'apache2', 
         'mysql',  
         'postgresql',
-        'redis-server',
-        'docker',
-        'ssh'
     ]
     MONITORING_INTERVAL = config['setting']['monitoring_interval']  # seconds
     
