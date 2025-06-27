@@ -28,12 +28,6 @@ def main():
         logger.error("Failed to load configuration. Exiting.")
         return
     BACKEND_URL = config['backend_url']  # Ganti dengan URL backend Anda
-    SERVICES_TO_MONITOR = [
-        'nginx',
-        'apache2', 
-        'mysql',  
-        'postgresql',
-    ]
     MONITORING_INTERVAL = config['setting']['monitoring_interval']  # seconds
     
     # Initialize agent
@@ -42,11 +36,10 @@ def main():
     logger.info("Monitoring Agent started")
     logger.info(f"Backend URL: {BACKEND_URL}")
     logger.info(f"Monitoring interval: {MONITORING_INTERVAL} seconds")
-    logger.info(f"Services to monitor: {', '.join(SERVICES_TO_MONITOR)}")
     
     try:
         while True:
-            agent.run_monitoring_cycle(SERVICES_TO_MONITOR)
+            agent.run_monitoring_cycle()
             time.sleep(MONITORING_INTERVAL)
     except KeyboardInterrupt:
         logger.info("Monitoring Agent stopped by user")

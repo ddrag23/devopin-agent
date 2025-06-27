@@ -39,11 +39,26 @@ class MonitoringAgent:
         except Exception as e:
             logger.error(f"Error fetching log paths from backend: {e}")
             return []
-    
+    def get_worker_from_backend(self) -> List[Dict[str, str]]:
+        """Get log file paths from backend API"""
+        if not self.backend_url:
+            logger.warning("No backend URL configured")
+            return []
+            
+        try:
+            response = requests.get(f"{self.backend_url}/api/workers", timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("data")
+            else:
+                logger.error(f"Failed to get log paths: {response.status_code}")
+                return []
+        except Exception as e:
+            logger.error(f"Error fetching log paths from backend: {e}")
+            return []
     def parse_logs_from_backend(self) -> Dict[str, List[LogEntry]]:
         """Parse logs based on paths from backend"""
         projects = self.get_log_paths_from_backend()
-        print(projects)
         log_paths = [(project.get("framework_type"),project.get("log_path"),project.get("id")) for project in projects]
         parsed_logs = {}
         HOME = Path.home()
@@ -99,9 +114,11 @@ class MonitoringAgent:
             return False
 
     
-    def run_monitoring_cycle(self, services_to_monitor: List[str] | None = None):
+    def run_monitoring_cycle(self):
         """Run a complete monitoring cycle"""
-        if services_to_monitor is None:
+        get_workers = self.get_worker_from_backend()
+        services_to_monitor = [worker.get("name","") for worker in get_workers]
+        if len(services_to_monitor) == 0:
             services_to_monitor = ['nginx', 'apache2', 'mysql', 'postgresql', 'redis-server']
         
         logger.info("Starting monitoring cycle...")

@@ -1,6 +1,6 @@
 backend_url: "http://localhost:8080"
 setting:
-  monitoring_interval: 60
+  monitoring_interval: 5
   # smpt: #coming soon
   #   host: "smtp.example.com"
   #   port: 587
