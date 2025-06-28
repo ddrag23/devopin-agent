@@ -1,10 +1,97 @@
+# Devopin Agent Configuration
 backend_url: "http://localhost:8080"
+
+# Socket configuration for service control
+socket:
+  path: "/tmp/devopin-agent.sock" # Will use /run/devopin-agent.sock in production
+  permissions: 0o666
+  timeout: 30
+
+# Monitoring settings
 setting:
-  monitoring_interval: 5
-  # smpt: #coming soon
-  #   host: "smtp.example.com"
-  #   port: 587
-  #   username:
-  #   password: "your_password"
-  #   use_tls: true
-  #   email_from:
+  monitoring_interval: 5 # seconds
+  log_retention_days: 30
+  max_log_entries_per_cycle: 1000
+
+  # Service monitoring
+  services:
+    default_services:
+      - nginx
+      - apache2
+      - mysql
+      - postgresql
+      - redis-server
+
+    # Custom services to monitor (akan diambil dari database juga)
+    custom_services: []
+
+    # Service control settings
+    service_timeout: 30 # seconds
+    restart_delay: 5 # seconds between stop and start
+
+# Logging configuration
+logging:
+  level: "INFO" # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  file: "devopin-agent.log"
+  max_size: "10MB"
+  backup_count: 5
+  format: "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+
+# Security settings
+security:
+  allowed_commands:
+    - start
+    - stop
+    - restart
+    - status
+    - enable
+    - disable
+
+  # Socket access control (future feature)
+  socket_permissions:
+    user: "root"
+    group: "devopin"
+    mode: 0o660
+
+# Email alerts (coming soon)
+# smtp:
+#   host: "smtp.example.com"
+#   port: 587
+#   username: "alerts@yourdomain.com"
+#   password: "your_password"
+#   use_tls: true
+#   email_from: "Devopin Agent <alerts@yourdomain.com>"
+#
+#   # Alert recipients
+#   recipients:
+#     - "admin@yourdomain.com"
+#     - "devops@yourdomain.com"
+#
+#   # Alert thresholds
+#   alerts:
+#     cpu_threshold: 80      # percent
+#     memory_threshold: 85   # percent
+#     disk_threshold: 90     # percent
+#     service_down_notify: true
+
+# Performance settings
+performance:
+  # System metrics collection
+  cpu_sample_interval: 1 # seconds
+  memory_check_interval: 5 # seconds
+  disk_check_interval: 60 # seconds
+
+  # Log parsing optimization
+  max_file_size: "100MB" # Skip files larger than this
+  chunk_size: 8192 # bytes to read at a time
+
+  # Database connection pooling (future)
+  db_pool_size: 5
+  db_timeout: 30
+
+# Development settings
+development:
+  debug_mode: false
+  verbose_logging: false
+  socket_debug: false
+  mock_systemctl: false # For testing without systemctl

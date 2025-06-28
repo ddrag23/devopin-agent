@@ -64,3 +64,17 @@ class ServiceMonitor:
             if status:
                 services.append(status)
         return services
+    
+    def handle_service_command(self,command: dict) -> str:
+        service_name = command.get("service")
+        action = command.get("action")  # start / stop / restart
+
+        if not service_name or not action:
+            raise ValueError("Missing 'service' or 'action'")
+
+        result = subprocess.run(["sudo", "systemctl", action, service_name], capture_output=True, text=True)
+
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip())
+
+        return result.stdout.strip()

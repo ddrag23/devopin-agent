@@ -65,3 +65,4 @@ agents/*.pyc
 .services
 *.sh
 systemctl
+tmp/
