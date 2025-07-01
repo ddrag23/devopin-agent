@@ -38,6 +38,15 @@ class LogParser:
             r'(?P<level>\w+)\s*-\s*'
             r'(?P<message>.+)'
         )
+        
+        # FastAPI log pattern
+        self.fastapi_pattern = re.compile(
+            r'(?P<timestamp>\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})\s*-\s*'
+            r'(?P<module>[\w.]+)\s*-\s*'
+            r'(?P<level>\w+)\s*-\s*'
+            r'(?P<file>\w+\.py):(?P<line>\d+)\s*-\s*'
+            r'(?P<message>.+)'
+        )
 
         
         # Generic error patterns for extracting controller/file info
@@ -116,6 +125,22 @@ class LogParser:
             message=data['message'],
         )
 
+    def parse_fastapi_log(self, line: str) -> Optional[LogEntry]:
+        """Parse FastAPI log format: 2025-06-29 12:32:30 - app.api - INFO - route.py:59 - Running threshold monitoring..."""
+        match = self.fastapi_pattern.match(line.strip())
+        if not match:
+            return None
+        
+        data = match.groupdict()
+        return LogEntry(
+            timestamp=data['timestamp'],
+            level=data['level'].upper(),
+            message=data['message'],
+            controller=data['module'],
+            line_number=data['line'],
+            file_path=data['file']
+        )
+
 
     def _extract_error_location(self, message: str) -> tuple:
         """
@@ -168,6 +193,7 @@ class LogParser:
             'flask': self.parse_django_flask_log,
             'nodejs': self.parse_nodejs_log,
             'python':self.parse_python_log,
+            'fastapi':self.parse_fastapi_log,
         }
 
         parser = parser_map.get(log_type.lower())
