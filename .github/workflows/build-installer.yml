@@ -52,8 +52,9 @@ jobs:
         
     - name: Create installer package
       run: |
+        rm -rf dist/devopin-agent
         mkdir -p dist/devopin-agent
-        cp dist/devopin-agent dist/devopin-agent/
+        cp dist/devopin-agent dist/devopin-agent/devopin-agent
         cp config.yaml dist/devopin-agent/config.yaml.example
         cp LICENSE dist/devopin-agent/
         cp README.md dist/devopin-agent/
