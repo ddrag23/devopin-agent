@@ -34,7 +34,7 @@ jobs:
       - name: Build binary with PyInstaller
         run: |
           echo "Building Devopin Agent binary..."
-          pyinstaller --clean devopin-agent.spec
+          pyinstaller devopin-agent.spec
 
           # Verify build success
           if [ ! -f "dist/devopin-agent" ]; then
