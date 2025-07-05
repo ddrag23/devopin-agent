@@ -4,6 +4,10 @@ on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -226,31 +230,18 @@ jobs:
           name: devopin-agent-installer
           path: dist/devopin-agent-installer.tar.gz
 
-      - name: Create Release
+      # Alternative: Manual release creation
+      - name: Create Release (Alternative)
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          files: dist/devopin-agent-installer.tar.gz
-          body: |
-            Devopin Agent Release
-
-            ## Installation
-
-            ```bash
-            wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/devopin-agent-installer.tar.gz
-            tar -xzf devopin-agent-installer.tar.gz
-            cd installer
-            sudo ./install.sh
-            ```
-
-            ## Features
-            - System monitoring (CPU, memory, disk, network)
-            - Log parsing for Laravel, Django, Flask, Node.js, Python
-            - Service monitoring via systemctl
-            - Remote control via Unix socket
-            - Automatic systemd service installation
-            - Single binary distribution (no Python dependencies required)
-          draft: false
-          prerelease: false
+        run: |
+          echo "⚠️  Auto-release failed. Manual steps:"
+          echo "1. Go to GitHub Releases page"
+          echo "2. Create new release with tag: ${{ github.ref_name }}"
+          echo "3. Download installer from Actions artifacts"
+          echo "4. Upload devopin-agent-installer.tar.gz to the release"
+          echo ""
+          echo "Installation instructions:"
+          echo "wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/devopin-agent-installer.tar.gz"
+          echo "tar -xzf devopin-agent-installer.tar.gz"
+          echo "cd installer"
+          echo "sudo ./install.sh"
