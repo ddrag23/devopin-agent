@@ -76,7 +76,7 @@ class DevopinAgent:
 
             # Initialize monitoring agent
             backend_url = self.config.get("backend_url")
-            self.monitoring_agent = MonitoringAgent(backend_url=backend_url)
+            self.monitoring_agent = MonitoringAgent(backend_url=backend_url, config=self.config)
 
             # Initialize socket server
             socket_config = self.config.get("socket", {})

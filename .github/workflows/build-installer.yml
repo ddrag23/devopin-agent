@@ -118,6 +118,7 @@ jobs:
           mkdir -p /etc/devopin
           mkdir -p /var/log/devopin
           mkdir -p /run/devopin-agent
+          mkdir -p /var/lib/devopin-agent/offsets
 
           # Copy binary
           echo "📦 Installing binary..."
@@ -128,17 +129,19 @@ jobs:
           if [ ! -f /etc/devopin/config.yaml ]; then
               echo "⚙️  Installing default configuration..."
               cp config.yaml.example /etc/devopin/config.yaml
-              # Update socket path for production
+              # Update paths for production
               sed -i 's|"/tmp/devopin-agent.sock"|"/run/devopin-agent/devopin-agent.sock"|' /etc/devopin/config.yaml
+              sed -i 's|".offsets"|"/var/lib/devopin-agent/offsets"|' /etc/devopin/config.yaml
           else
               echo "⚙️  Configuration already exists, skipping..."
           fi
-
+          
           # Set permissions
           echo "🔐 Setting permissions..."
           chown -R devopin:devopin /opt/devopin-agent
           chown -R devopin:devopin /var/log/devopin
           chown -R devopin:devopin /run/devopin-agent
+          chown -R devopin:devopin /var/lib/devopin-agent
           chown devopin:devopin /etc/devopin/config.yaml
           chmod 640 /etc/devopin/config.yaml
 
@@ -202,6 +205,7 @@ jobs:
           rm -rf /opt/devopin-agent
           rm -rf /var/log/devopin
           rm -rf /run/devopin-agent
+          rm -rf /var/lib/devopin-agent
 
           # Ask about config removal
           read -p "❓ Remove configuration files? (y/N): " -n 1 -r

@@ -16,8 +16,13 @@ logger = logging.getLogger(__name__)
 class MonitoringAgent:
     """Main monitoring agent class"""
     
-    def __init__(self, backend_url:  str | None = None):
-        self.log_parser = LogParser()
+    def __init__(self, backend_url:  str | None = None, config: dict | None = None):
+        # Get offset directory from config, default to .offsets
+        offset_dir = ".offsets"
+        if config:
+            offset_dir = config.get("performance", {}).get("offset_dir", ".offsets")
+        
+        self.log_parser = LogParser(offset_dir=offset_dir)
         self.system_monitor = SystemMonitor()
         self.service_monitor = ServiceMonitor()
         self.backend_url = backend_url
