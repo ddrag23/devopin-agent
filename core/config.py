@@ -4,7 +4,7 @@ import yaml
 def load_config():
     # 1. Prioritaskan config lokal di development
     local_config_path = os.path.join(os.getcwd(), 'config.yaml')
-    global_config_path = '/etc/devopin-agent/config.yaml'
+    global_config_path = '/etc/devopin/config.yaml'
 
     if os.path.exists(local_config_path):
         print(f"[dev] Loading config from {local_config_path}")
