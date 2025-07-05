@@ -83,7 +83,7 @@ jobs:
           PrivateTmp=true
           ProtectSystem=strict
           ProtectHome=true
-          ReadWritePaths=/opt/devopin-agent /var/log/devopin /etc/devopin /run/devopin-agent
+          ReadWritePaths=/opt/devopin-agent /var/log/devopin /etc/devopin /run/devopin-agent /var/lib/devopin-agent
 
           [Install]
           WantedBy=multi-user.target
@@ -144,6 +144,8 @@ jobs:
           chown -R devopin:devopin /var/lib/devopin-agent
           chown devopin:devopin /etc/devopin/config.yaml
           chmod 640 /etc/devopin/config.yaml
+          chmod 755 /var/lib/devopin-agent
+          chmod 755 /var/lib/devopin-agent/offsets
 
           # Install systemd service
           echo "🔧 Installing systemd service..."
