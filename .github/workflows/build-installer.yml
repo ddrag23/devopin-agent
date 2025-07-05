@@ -52,16 +52,15 @@ jobs:
         
     - name: Create installer package
       run: |
-        rm -rf dist/devopin-agent
-        mkdir -p dist/devopin-agent
-        cp dist/devopin-agent dist/devopin-agent/devopin-agent
-        cp config.yaml dist/devopin-agent/config.yaml.example
-        cp LICENSE dist/devopin-agent/
-        cp README.md dist/devopin-agent/
+        mkdir -p dist/installer
+        cp dist/devopin-agent dist/installer/devopin-agent
+        cp config.yaml dist/installer/config.yaml.example
+        cp LICENSE dist/installer/
+        cp README.md dist/installer/
         
     - name: Create systemd service file
       run: |
-        cat > dist/devopin-agent/devopin-agent.service << 'EOF'
+        cat > dist/installer/devopin-agent.service << 'EOF'
         [Unit]
         Description=Devopin System Monitoring Agent
         After=network.target
@@ -92,7 +91,7 @@ jobs:
         
     - name: Create install script
       run: |
-        cat > dist/devopin-agent/install.sh << 'EOF'
+        cat > dist/installer/install.sh << 'EOF'
         #!/bin/bash
         set -e
         
@@ -162,11 +161,11 @@ jobs:
         echo "To restart: sudo systemctl restart devopin-agent"
         EOF
         
-        chmod +x dist/devopin-agent/install.sh
+        chmod +x dist/installer/install.sh
         
     - name: Create uninstall script
       run: |
-        cat > dist/devopin-agent/uninstall.sh << 'EOF'
+        cat > dist/installer/uninstall.sh << 'EOF'
         #!/bin/bash
         set -e
         
@@ -217,12 +216,12 @@ jobs:
         echo "Uninstallation completed!"
         EOF
         
-        chmod +x dist/devopin-agent/uninstall.sh
+        chmod +x dist/installer/uninstall.sh
         
     - name: Create archive
       run: |
         cd dist
-        tar -czf devopin-agent-installer.tar.gz devopin-agent/
+        tar -czf devopin-agent-installer.tar.gz installer/
         
     - name: Upload installer artifact
       uses: actions/upload-artifact@v4
