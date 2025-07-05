@@ -3,6 +3,7 @@ name: Build Devopin Agent Installer
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -32,6 +33,7 @@ jobs:
 
       - name: Build binary with PyInstaller
         run: |
+          echo "Building Devopin Agent binary..."
           pyinstaller --onefile \
             --name devopin-agent \
             --add-data "config.yaml:." \
@@ -51,16 +53,30 @@ jobs:
             --clean \
             main.py
 
+          # Verify build success
+          if [ ! -f "dist/devopin-agent" ]; then
+            echo "❌ Build failed: devopin-agent binary not found"
+            exit 1
+          fi
+
+          echo "✅ Build successful: $(ls -la dist/devopin-agent)"
+
       - name: Create installer package
         run: |
+          echo "Creating installer package..."
           mkdir -p dist/installer
           cp dist/devopin-agent dist/installer/devopin-agent
           cp config.yaml dist/installer/config.yaml.example
-          cp LICENSE dist/installer/
-          cp README.md dist/installer/
+
+          # Copy additional files if they exist
+          [ -f LICENSE ] && cp LICENSE dist/installer/ || echo "# License" > dist/installer/LICENSE
+          [ -f README.md ] && cp README.md dist/installer/ || echo "# Devopin Agent" > dist/installer/README.md
+
+          echo "✅ Installer package created"
 
       - name: Create systemd service file
         run: |
+          echo "Creating systemd service file..."
           cat > dist/installer/devopin-agent.service << 'EOF'
           [Unit]
           Description=Devopin System Monitoring Agent
@@ -90,50 +106,53 @@ jobs:
           WantedBy=multi-user.target
           EOF
 
+          echo "✅ Systemd service file created"
+
       - name: Create install script
         run: |
+          echo "Creating install script..."
           cat > dist/installer/install.sh << 'EOF'
           #!/bin/bash
           set -e
 
-          echo "Installing Devopin Agent..."
+          echo "🚀 Installing Devopin Agent..."
 
           # Check if running as root
           if [ "$EUID" -ne 0 ]; then
-              echo "Please run as root (use sudo)"
+              echo "❌ Please run as root (use sudo)"
               exit 1
           fi
 
           # Create devopin user and group
           if ! id -u devopin >/dev/null 2>&1; then
-              echo "Creating devopin user..."
+              echo "👤 Creating devopin user..."
               useradd -r -s /bin/false -d /opt/devopin-agent -c "Devopin Agent" devopin
           fi
 
           # Create directories
-          echo "Creating directories..."
+          echo "📁 Creating directories..."
           mkdir -p /opt/devopin-agent
           mkdir -p /etc/devopin
           mkdir -p /var/log/devopin
           mkdir -p /run/devopin-agent
 
           # Copy binary
-          echo "Installing binary..."
+          echo "📦 Installing binary..."
           cp devopin-agent /opt/devopin-agent/
           chmod +x /opt/devopin-agent/devopin-agent
 
           # Copy config if not exists
           if [ ! -f /etc/devopin/config.yaml ]; then
-              echo "Installing default configuration..."
+              echo "⚙️  Installing default configuration..."
               cp config.yaml.example /etc/devopin/config.yaml
               # Update socket path for production
               sed -i 's|"/tmp/devopin-agent.sock"|"/run/devopin-agent/devopin-agent.sock"|' /etc/devopin/config.yaml
           else
-              echo "Configuration already exists, skipping..."
+              echo "⚙️  Configuration already exists, skipping..."
           fi
 
           # Set permissions
-          echo "Setting permissions..."
+          echo "🔐 Setting permissions..."
           chown -R devopin:devopin /opt/devopin-agent
           chown -R devopin:devopin /var/log/devopin
           chown -R devopin:devopin /run/devopin-agent
@@ -141,88 +160,103 @@ jobs:
           chmod 640 /etc/devopin/config.yaml
 
           # Install systemd service
-          echo "Installing systemd service..."
+          echo "🔧 Installing systemd service..."
           cp devopin-agent.service /etc/systemd/system/
           systemctl daemon-reload
           systemctl enable devopin-agent
 
           # Start service
-          echo "Starting Devopin Agent..."
+          echo "🚀 Starting Devopin Agent..."
           systemctl start devopin-agent
 
-          echo "Installation completed successfully!"
-          echo "Service status:"
+          echo ""
+          echo "✅ Installation completed successfully!"
+          echo ""
+          echo "📊 Service status:"
           systemctl status devopin-agent --no-pager
           echo ""
-          echo "Configuration file: /etc/devopin/config.yaml"
-          echo "Log files: /var/log/devopin/"
-          echo "Socket: /run/devopin-agent/devopin-agent.sock"
+          echo "📝 Configuration file: /etc/devopin/config.yaml"
+          echo "📋 Log files: /var/log/devopin/"
+          echo "🔌 Socket: /run/devopin-agent/devopin-agent.sock"
           echo ""
-          echo "To check logs: sudo journalctl -u devopin-agent -f"
-          echo "To restart: sudo systemctl restart devopin-agent"
+          echo "💡 Useful commands:"
+          echo "   View logs: sudo journalctl -u devopin-agent -f"
+          echo "   Restart:   sudo systemctl restart devopin-agent"
+          echo "   Stop:      sudo systemctl stop devopin-agent"
+          echo "   Status:    sudo systemctl status devopin-agent"
           EOF
 
           chmod +x dist/installer/install.sh
+          echo "✅ Install script created"
 
       - name: Create uninstall script
         run: |
+          echo "Creating uninstall script..."
           cat > dist/installer/uninstall.sh << 'EOF'
           #!/bin/bash
           set -e
 
-          echo "Uninstalling Devopin Agent..."
+          echo "🗑️  Uninstalling Devopin Agent..."
 
           # Check if running as root
           if [ "$EUID" -ne 0 ]; then
-              echo "Please run as root (use sudo)"
+              echo "❌ Please run as root (use sudo)"
               exit 1
           fi
 
           # Stop and disable service
-          echo "Stopping service..."
+          echo "⏹️  Stopping service..."
           systemctl stop devopin-agent || true
           systemctl disable devopin-agent || true
 
           # Remove systemd service
-          echo "Removing systemd service..."
+          echo "🔧 Removing systemd service..."
           rm -f /etc/systemd/system/devopin-agent.service
           systemctl daemon-reload
 
           # Remove application files
-          echo "Removing application files..."
+          echo "📁 Removing application files..."
           rm -rf /opt/devopin-agent
           rm -rf /var/log/devopin
           rm -rf /run/devopin-agent
 
           # Ask about config removal
-          read -p "Remove configuration files? (y/N): " -n 1 -r
+          read -p "❓ Remove configuration files? (y/N): " -n 1 -r
           echo
           if [[ $REPLY =~ ^[Yy]$ ]]; then
               rm -rf /etc/devopin
-              echo "Configuration files removed."
+              echo "✅ Configuration files removed."
           else
-              echo "Configuration files kept in /etc/devopin/"
+              echo "📝 Configuration files kept in /etc/devopin/"
           fi
 
           # Ask about user removal
-          read -p "Remove devopin user? (y/N): " -n 1 -r
+          read -p "❓ Remove devopin user? (y/N): " -n 1 -r
           echo
           if [[ $REPLY =~ ^[Yy]$ ]]; then
               userdel devopin || true
-              echo "User devopin removed."
+              echo "✅ User devopin removed."
           else
-              echo "User devopin kept."
+              echo "👤 User devopin kept."
           fi
 
-          echo "Uninstallation completed!"
+          echo ""
+          echo "✅ Uninstallation completed!"
           EOF
 
           chmod +x dist/installer/uninstall.sh
+          echo "✅ Uninstall script created"
 
       - name: Create archive
         run: |
+          echo "📦 Creating installer archive..."
           cd dist
           tar -czf devopin-agent-installer.tar.gz installer/
+
+          # Verify archive
+          echo "✅ Archive created: $(ls -la devopin-agent-installer.tar.gz)"
+          echo "📋 Archive contents:"
+          tar -tzf devopin-agent-installer.tar.gz
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
@@ -230,18 +264,72 @@ jobs:
           name: devopin-agent-installer
           path: dist/devopin-agent-installer.tar.gz
 
-      # Alternative: Manual release creation
-      - name: Create Release (Alternative)
+      # Get version from tag
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      # 🔧 ACTUAL RELEASE CREATION (This was missing!)
+      - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          echo "⚠️  Auto-release failed. Manual steps:"
-          echo "1. Go to GitHub Releases page"
-          echo "2. Create new release with tag: ${{ github.ref_name }}"
-          echo "3. Download installer from Actions artifacts"
-          echo "4. Upload devopin-agent-installer.tar.gz to the release"
-          echo ""
-          echo "Installation instructions:"
-          echo "wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/devopin-agent-installer.tar.gz"
-          echo "tar -xzf devopin-agent-installer.tar.gz"
-          echo "cd installer"
-          echo "sudo ./install.sh"
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Devopin Agent ${{ steps.version.outputs.VERSION }}
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## 🔍 Devopin Monitoring Agent ${{ steps.version.outputs.VERSION }}
+
+            A lightweight system monitoring agent that collects logs, system metrics, and service status.
+
+            ### 📥 Quick Installation
+            ```bash
+            wget https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.VERSION }}/devopin-agent-installer.tar.gz
+            tar -xzf devopin-agent-installer.tar.gz
+            cd installer
+            sudo ./install.sh
+            ```
+
+            ### 📦 What's Included
+            - `devopin-agent` - Monitoring agent binary
+            - `install.sh` - Automated installer script
+            - `uninstall.sh` - Uninstaller script
+            - `devopin-agent.service` - Systemd service file
+            - `config.yaml.example` - Configuration template
+            - `README.md` - Documentation
+
+            ### 🔧 After Installation
+            - **Service status:** `sudo systemctl status devopin-agent`
+            - **View logs:** `sudo journalctl -u devopin-agent -f`
+            - **Configuration:** `/etc/devopin/config.yaml`
+            - **Socket:** `/run/devopin-agent/devopin-agent.sock`
+
+            ### 🖥️ System Requirements
+            - Linux x64 (Ubuntu 18.04+, CentOS 7+, Debian 9+)
+            - Root/sudo access for installation
+            - Network access to Devopin backend
+
+            ### 🔄 Management Commands
+            ```bash
+            # Start/stop service
+            sudo systemctl start devopin-agent
+            sudo systemctl stop devopin-agent
+            sudo systemctl restart devopin-agent
+
+            # View status and logs
+            sudo systemctl status devopin-agent
+            sudo journalctl -u devopin-agent -f
+
+            # Uninstall
+            sudo ./uninstall.sh
+            ```
+
+            Built with ❤️ by the Devopin team
+          files: dist/devopin-agent-installer.tar.gz
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.VERSION, 'beta') || contains(steps.version.outputs.VERSION, 'alpha') || contains(steps.version.outputs.VERSION, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Cleanup
+      - name: Cleanup
+        run: rm -rf dist/
