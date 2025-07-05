@@ -34,24 +34,7 @@ jobs:
       - name: Build binary with PyInstaller
         run: |
           echo "Building Devopin Agent binary..."
-          pyinstaller --onefile \
-            --name devopin-agent \
-            --add-data "config.yaml:." \
-            --hidden-import yaml \
-            --hidden-import requests \
-            --hidden-import psutil \
-            --hidden-import json \
-            --hidden-import socket \
-            --hidden-import threading \
-            --hidden-import subprocess \
-            --hidden-import os \
-            --hidden-import sys \
-            --hidden-import time \
-            --hidden-import logging \
-            --hidden-import signal \
-            --hidden-import pathlib \
-            --clean \
-            main.py
+          pyinstaller --clean devopin-agent.spec
 
           # Verify build success
           if [ ! -f "dist/devopin-agent" ]; then
