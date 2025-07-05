@@ -72,7 +72,7 @@ class MonitoringAgent:
             if path and log_type:
                 path_obj = Path(path)
                 full_path = path_obj if path_obj.is_absolute() else HOME / path_obj
-                logger.debug(f"Full log path resolved to: {full_path}")
+                logger.info(f"Full log path resolved to: {full_path}")
                 entries = self.log_parser.parse_log_file(str(full_path), log_type)
                 logger.info("Parsed log entries successfully")
             else:
