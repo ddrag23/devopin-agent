@@ -110,6 +110,10 @@ jobs:
           if ! id -u devopin >/dev/null 2>&1; then
               echo "👤 Creating devopin user..."
               useradd -r -s /bin/false -d /opt/devopin-agent -c "Devopin Agent" devopin
+              # Add devopin user to www-data group for log file access
+              usermod -a -G www-data devopin || echo "www-data group not found, skipping"
+              # Also add to adm group for system logs
+              usermod -a -G adm devopin || echo "adm group not found, skipping"
           fi
 
           # Create directories

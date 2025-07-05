@@ -212,15 +212,28 @@ class LogParser:
 
         for log_file in log_files:
             try:
+                # Debug: Check file permissions
+                file_stat = os.stat(log_file)
+                logger.debug(f"File {log_file} - Size: {file_stat.st_size}, Mode: {oct(file_stat.st_mode)}, Owner: {file_stat.st_uid}:{file_stat.st_gid}")
+                
                 last_offset = self._load_offset(log_file)
+                logger.debug(f"Starting from offset {last_offset} for {log_file}")
+                
                 with open(log_file, 'r', encoding='utf-8') as f:
                     f.seek(last_offset)
+                    line_count = 0
                     for line in f:
                         if line.strip():
                             entry = parser(line)
                             if entry:
                                 entries.append(entry)
+                            line_count += 1
+                    
+                    logger.debug(f"Processed {line_count} lines from {log_file}, found {len(entries)} entries")
                     self._save_offset(log_file, f.tell())  # Simpan posisi terakhir
+                    
+            except PermissionError as e:
+                logger.error(f"Permission denied reading log file {log_file}: {e}")
             except Exception as e:
                 logger.error(f"Error parsing log file {log_file}: {e}")
 
