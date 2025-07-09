@@ -38,6 +38,7 @@ a = Analysis(
         'collections',
         'dataclasses',
         'enum',
+        'dateutil',
     ],
     hookspath=[],
     hooksconfig={},
