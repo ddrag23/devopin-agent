@@ -122,7 +122,7 @@ jobs:
           mkdir -p /etc/devopin
           mkdir -p /var/log/devopin
           mkdir -p /run/devopin-agent
-          mkdir -p /var/lib/devopin-agent/offsets
+          mkdir -p /var/lib/devopin-agent
 
           # Copy binary
           echo "📦 Installing binary..."
@@ -135,7 +135,7 @@ jobs:
               cp config.yaml.example /etc/devopin/config.yaml
               # Update paths for production
               sed -i 's|"/tmp/devopin-agent.sock"|"/run/devopin-agent/devopin-agent.sock"|' /etc/devopin/config.yaml
-              sed -i 's|".offsets"|"/var/lib/devopin-agent/offsets"|' /etc/devopin/config.yaml
+              sed -i 's|"last_timestamp.json"|"/var/lib/devopin-agent/last_timestamp.json"|' /etc/devopin/config.yaml
           else
               echo "⚙️  Configuration already exists, skipping..."
           fi
@@ -149,7 +149,6 @@ jobs:
           chown devopin:devopin /etc/devopin/config.yaml
           chmod 640 /etc/devopin/config.yaml
           chmod 755 /var/lib/devopin-agent
-          chmod 755 /var/lib/devopin-agent/offsets
 
           # Install systemd service
           echo "🔧 Installing systemd service..."

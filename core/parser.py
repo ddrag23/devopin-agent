@@ -2,22 +2,20 @@ import re
 import logging
 import os
 import glob
+import json
 from typing import Optional,List
+from datetime import datetime
 from models.data_classes import LogEntry
+from dateutil import parser
 logger = logging.getLogger(__name__)
 
 class LogParser:
     """Handles parsing of different log file formats"""
     
-    def __init__(self,offset_dir: str = ".offsets"):
-        # Laravel log pattern
-        self.laravel_pattern = re.compile(
-            r'\[(?P<timestamp>\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})\]\s+'
-            r'(?P<environment>\w+)\.(?P<level>\w+):\s+'
-            r'(?P<message>.*?)(?=\s*\{)'
-            r'\s(?P<context>\{.*\})?$',
-            re.DOTALL
-        )
+    def __init__(self, timestamp_file: str = "last_timestamp.json"):
+        # Laravel log pattern - updated to match PRD specification
+        self.laravel_pattern = re.compile(r"\[(.*?)\]\s(\w+)\.(\w+):\s(.+)")
+        self.timestamp_file = timestamp_file
         
         # django_flask log pattern (Django/Flask)
         self.django_flask = re.compile(
@@ -56,8 +54,56 @@ class LogParser:
             re.compile(r'in\s+(?P<file>[^:]+):(?P<line>\d+)'),
             re.compile(r'File\s+"(?P<file>[^"]+)",\s+line\s+(?P<line>\d+)'),
         ]
-        self.offset_dir = offset_dir
-        os.makedirs(self.offset_dir, exist_ok=True)
+        
+    def save_last_timestamp(self, project_id: str, timestamp: datetime):
+        """Save the last processed timestamp with atomic writing to prevent corruption."""
+        data = {}
+        
+        # Try to load existing data with error handling
+        if os.path.exists(self.timestamp_file):
+            try:
+                with open(self.timestamp_file, "r") as f:
+                    content = f.read().strip()
+                    if content:  # Only parse if file has content
+                        data = json.loads(content)
+            except (json.JSONDecodeError, IOError) as e:
+                logger.warning(f"Failed to read timestamp file {self.timestamp_file}: {e}. Starting fresh.")
+                data = {}
+
+        # Update the timestamp
+        data[str(project_id)] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Write atomically using temporary file
+        temp_file = self.timestamp_file + ".tmp"
+        try:
+            with open(temp_file, "w") as f:
+                json.dump(data, f, indent=2)
+            
+            # Atomic rename
+            os.rename(temp_file, self.timestamp_file)
+            logger.debug(f"Saved timestamp for project {project_id}: {timestamp}")
+        except Exception as e:
+            logger.error(f"Failed to save timestamp for project {project_id}: {e}")
+            # Clean up temp file if it exists
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+
+    def get_last_timestamp(self, project_id: str) -> Optional[datetime]:
+        """Get the last processed timestamp from cache with error handling."""
+        if os.path.exists(self.timestamp_file):
+            try:
+                with open(self.timestamp_file, "r") as f:
+                    content = f.read().strip()
+                    if content:  # Only parse if file has content
+                        data = json.loads(content)
+                        timestamp_str = data.get(str(project_id), None)
+                        # If exists, convert to datetime directly
+                        if timestamp_str:
+                            return datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+            except (json.JSONDecodeError, IOError, ValueError) as e:
+                logger.warning(f"Failed to read timestamp for project {project_id}: {e}")
+                return None
+        return None
         
     def parse_laravel_log(self, log_line: str) -> Optional[LogEntry]:
         """Parse Laravel log format"""
@@ -65,15 +111,15 @@ class LogParser:
         if not match:
             return None
             
-        data = match.groupdict()
-        # Extract controller info from message or context
-        controller, line_number, file_path = self._extract_error_location(data['message'])
+        timestamp, _, level, message = match.groups()
+        # Extract controller info from message
+        controller, line_number, file_path = self._extract_error_location(message)
         
         return LogEntry(
-            timestamp=data['timestamp'],
-            level=data['level'].upper(),
-            message=data['message'],
-            context=data['context'],
+            timestamp=timestamp,
+            level=level.upper(),
+            message=message.strip(),
+            context=None,
             controller=controller,
             line_number=line_number,
             file_path=file_path
@@ -183,8 +229,8 @@ class LogParser:
 
         return controller, line_number, file_path
 
-    def parse_log_file(self, file_path: str, log_type: str) -> List[LogEntry]:
-        """Parse log file or directory containing logs"""
+    def parse_log_file(self, file_path: str, log_type: str, project_id: str |None= None) -> List[LogEntry]:
+        """Parse log file or directory containing logs using timestamp-based approach"""
         entries = []
 
         parser_map = {
@@ -196,10 +242,15 @@ class LogParser:
             'fastapi':self.parse_fastapi_log,
         }
 
-        parser = parser_map.get(log_type.lower())
-        if not parser:
+        parser_log = parser_map.get(log_type.lower())
+        if not parser_log:
             logger.error(f"Unsupported log type: {log_type}")
             return []
+
+        # Get last processed timestamp
+        last_timestamp = None
+        if project_id:
+            last_timestamp = self.get_last_timestamp(project_id)
 
         # Jika file_path adalah folder
         if os.path.isdir(file_path):
@@ -210,50 +261,76 @@ class LogParser:
             logger.error(f"Log file or directory not found: {file_path}")
             return []
 
+        new_entries_count = 0
+        skipped_entries_count = 0
+        
         for log_file in log_files:
             try:
                 # Debug: Check file permissions
                 file_stat = os.stat(log_file)
-                logger.info(f"File {log_file} - Size: {file_stat.st_size}, Mode: {oct(file_stat.st_mode)}, Owner: {file_stat.st_uid}:{file_stat.st_gid}")
+                # logger.info(f"File {log_file} - Size: {file_stat.st_size}, Mode: {oct(file_stat.st_mode)}, Owner: {file_stat.st_uid}:{file_stat.st_gid}")
                 
-                last_offset = self._load_offset(log_file)
-                logger.info(f"Starting from offset {last_offset} for {log_file}")
+                logger.info(f"Processing {log_file} with last_timestamp: {last_timestamp}")
                 
                 with open(log_file, 'r', encoding='utf-8') as f:
-                    f.seek(last_offset)
                     line_count = 0
+                    file_new_entries = 0
+                    file_skipped_entries = 0
+                    
                     for line in f:
                         if line.strip():
-                            entry = parser(line)
+                            entry = parser_log(line)
                             if entry:
+                                # Skip log if timestamp is less than or equal to last_timestamp
+                                if last_timestamp:
+                                    try:
+                                        format_timestamp = parser.parse(entry.timestamp).strftime("%Y-%m-%d %H:%M:%S")
+                                        log_time = datetime.strptime(format_timestamp, "%Y-%m-%d %H:%M:%S")
+                                        if log_time <= last_timestamp:
+                                            file_skipped_entries += 1
+                                            logger.debug(f"Skipping entry with timestamp {entry.timestamp} <= {last_timestamp}")
+                                            continue
+                                    except ValueError as e:
+                                        logger.warning(f"Failed to parse timestamp '{entry.timestamp}': {e}")
+                                        # If timestamp parsing fails, include the entry
+                                        pass
+                                
                                 entries.append(entry)
+                                file_new_entries += 1
+                                # logger.debug(f"Added entry with timestamp {entry.timestamp}")
                             line_count += 1
                     
-                    logger.info(f"Processed {line_count} lines from {log_file}, found {len(entries)} entries")
-                    self._save_offset(log_file, f.tell())  # Simpan posisi terakhir
+                    new_entries_count += file_new_entries
+                    skipped_entries_count += file_skipped_entries
+                    # logger.info(f"Processed {line_count} lines from {log_file}: {file_new_entries} new, {file_skipped_entries} skipped")
                     
             except PermissionError as e:
                 logger.error(f"Permission denied reading log file {log_file}: {e}")
             except Exception as e:
                 logger.error(f"Error parsing log file {log_file}: {e}")
+                
+        logger.info(f"Total: {new_entries_count} new entries, {skipped_entries_count} skipped entries")
+
+        # Save last timestamp if we have new entries
+        if entries and project_id:
+            try:
+                # Find the latest timestamp from all new entries
+                latest_timestamp = None
+                for entry in entries:
+                    try:
+                        format_timestamp_entry = parser.parse(entry.timestamp).strftime("%Y-%m-%d %H:%M:%S")
+                        entry_time = datetime.strptime(format_timestamp_entry, "%Y-%m-%d %H:%M:%S")
+                        if latest_timestamp is None or entry_time > latest_timestamp:
+                            latest_timestamp = entry_time
+                    except ValueError:
+                        logger.warning(f"Skipping invalid timestamp in save: {entry.timestamp}")
+                        continue
+                
+                if latest_timestamp:
+                    self.save_last_timestamp(project_id, latest_timestamp)
+                    logger.info(f"Saved latest timestamp for project {project_id}: {latest_timestamp}")
+                    
+            except Exception as e:
+                logger.error(f"Failed to save timestamp for project {project_id}: {e}")
 
         return entries
-    
-    def _get_offset_file(self, log_file: str) -> str:
-        log_name = os.path.basename(log_file)
-        return os.path.join(self.offset_dir, f"{log_name}.offset")
-
-    def _load_offset(self, log_file: str) -> int:
-        offset_path = self._get_offset_file(log_file)
-        if os.path.exists(offset_path):
-            with open(offset_path, 'r') as f:
-                try:
-                    return int(f.read())
-                except Exception:
-                    return 0
-        return 0
-
-    def _save_offset(self, log_file: str, offset: int):
-        offset_path = self._get_offset_file(log_file)
-        with open(offset_path, 'w') as f:
-            f.write(str(offset))

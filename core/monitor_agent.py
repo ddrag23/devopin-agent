@@ -17,12 +17,12 @@ class MonitoringAgent:
     """Main monitoring agent class"""
     
     def __init__(self, backend_url:  str | None = None, config: dict | None = None):
-        # Get offset directory from config, default to .offsets
-        offset_dir = ".offsets"
+        # Get timestamp file from config, default to last_timestamp.json
+        timestamp_file = "last_timestamp.json"
         if config:
-            offset_dir = config.get("performance", {}).get("offset_dir", ".offsets")
+            timestamp_file = config.get("performance", {}).get("timestamp_file", "last_timestamp.json")
         
-        self.log_parser = LogParser(offset_dir=offset_dir)
+        self.log_parser = LogParser(timestamp_file=timestamp_file)
         self.system_monitor = SystemMonitor()
         self.service_monitor = ServiceMonitor()
         self.backend_url = backend_url
@@ -73,7 +73,7 @@ class MonitoringAgent:
                 path_obj = Path(path)
                 full_path = path_obj if path_obj.is_absolute() else HOME / path_obj
                 logger.info(f"Full log path resolved to: {full_path}")
-                entries = self.log_parser.parse_log_file(str(full_path), log_type)
+                entries = self.log_parser.parse_log_file(str(full_path), log_type, project_id)
                 logger.info("Parsed log entries successfully")
             else:
                 entries = []
@@ -133,7 +133,6 @@ class MonitoringAgent:
         
         # Parse logs
         logs = self.parse_logs_from_backend()
-        
         # Get system metrics
         system_metrics = self.monitor_system()
         

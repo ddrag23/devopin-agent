@@ -9,7 +9,7 @@ socket:
 
 # Monitoring settings
 setting:
-  monitoring_interval: 5 # seconds
+  monitoring_interval: 30 # seconds
   log_retention_days: 30
   max_log_entries_per_cycle: 1000
 
@@ -31,7 +31,7 @@ setting:
 
 # Logging configuration
 logging:
-  level: "INFO" # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "DEBUG" # DEBUG, INFO, WARNING, ERROR, CRITICAL
   file: "devopin-agent.log"
   max_size: "10MB"
   backup_count: 5
@@ -84,9 +84,9 @@ performance:
   # Log parsing optimization
   max_file_size: "100MB" # Skip files larger than this
   chunk_size: 8192 # bytes to read at a time
-  
-  # Offset directory for tracking log file positions
-  offset_dir: ".offsets" # Will use /var/lib/devopin-agent/offsets in production
+
+  # Timestamp file for tracking last processed log timestamps
+  timestamp_file: "last_timestamp.json" # Will use /var/lib/devopin-agent/last_timestamp.json in production
 
   # Database connection pooling (future)
   db_pool_size: 5

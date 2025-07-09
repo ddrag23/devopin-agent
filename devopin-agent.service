@@ -20,7 +20,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/devopin-agent /var/log/devopin /etc/devopin /run/devopin-agent
+ReadWritePaths=/opt/devopin-agent /var/log/devopin /etc/devopin /run/devopin-agent /var/lib/devopin-agent
 
 [Install]
 WantedBy=multi-user.target
