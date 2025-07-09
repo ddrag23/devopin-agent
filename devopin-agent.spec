@@ -38,7 +38,7 @@ a = Analysis(
         'collections',
         'dataclasses',
         'enum',
-        'dateutil',
+        'python-dateutil',
     ],
     hookspath=[],
     hooksconfig={},
