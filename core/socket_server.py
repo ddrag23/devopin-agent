@@ -6,13 +6,34 @@ import os
 import subprocess
 from pathlib import Path
 from typing import Dict, Any, Optional
+from .config import load_config
 
 logger = logging.getLogger(__name__)
 
-# Simple socket path logic
+# Socket path logic with config support
 def get_default_socket_path() -> str:
-    """Get appropriate socket path."""
-    # Production: check if running as systemd service or has access to /run
+    """Get appropriate socket path from config.yaml or fallback to default."""
+    try:
+        config = load_config()
+        socket_path = config.get('socket', {}).get('path')
+        
+        if socket_path:
+            # If it's a relative path, make it absolute
+            if not os.path.isabs(socket_path):
+                project_root = Path(__file__).parent.parent.absolute()
+                socket_path = str(project_root / socket_path)
+            
+            # Ensure directory exists
+            socket_dir = os.path.dirname(socket_path)
+            if socket_dir and not os.path.exists(socket_dir):
+                os.makedirs(socket_dir, exist_ok=True)
+            
+            return socket_path
+            
+    except Exception as e:
+        logger.warning(f"Failed to load socket path from config: {e}, using fallback")
+    
+    # Fallback logic (same as before)
     if os.access("/run", os.W_OK):
         return "/run/devopin-agent.sock"
     
@@ -51,8 +72,14 @@ class AgentSocketServer:
             self.server_socket.bind(self.socket_path)
             self.server_socket.listen(5)
             
-            # Set permissions for socket file
-            os.chmod(self.socket_path, 0o666)
+            # Set permissions for socket file from config
+            try:
+                config = load_config()
+                socket_permissions = config.get('socket', {}).get('permissions', 0o666)
+                os.chmod(self.socket_path, socket_permissions)
+            except Exception as e:
+                logger.warning(f"Failed to read socket permissions from config: {e}, using default 0o666")
+                os.chmod(self.socket_path, 0o666)
             
             self.is_running = True
             logger.info(f"Agent socket server started at {self.socket_path}")
