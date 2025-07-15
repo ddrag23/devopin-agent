@@ -65,5 +65,5 @@ agents/*.pyc
 .services
 *.sh
 systemctl
+last_timestamp.json
 tmp/
-CLAUDE.md
