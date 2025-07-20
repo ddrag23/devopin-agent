@@ -27,6 +27,29 @@ echo '{"command": "stop", "service": "nginx"}' | socat - UNIX-CONNECT:./tmp/devo
 echo '{"command": "restart", "service": "nginx"}' | socat - UNIX-CONNECT:./tmp/devopin_agent.sock
 ```
 
+### Production Installation
+```bash
+# Install as systemd service (requires root)
+sudo ./install.sh
+
+# Service management
+sudo systemctl start devopin-agent
+sudo systemctl stop devopin-agent
+sudo systemctl restart devopin-agent
+sudo systemctl status devopin-agent
+
+# View logs
+sudo journalctl -u devopin-agent -f
+```
+
+### Binary Creation
+```bash
+# Create standalone binary using PyInstaller
+pyinstaller devopin-agent.spec
+
+# Binary will be created in dist/devopin-agent
+```
+
 ### Mock SystemCtl for Development
 ```bash
 # Set up mock systemctl for testing (when systemctl is not available)
@@ -37,6 +60,19 @@ echo '{"command": "restart", "service": "nginx"}' | socat - UNIX-CONNECT:./tmp/d
 
 # Clean up mock services
 ./cleanup.sh
+```
+
+### Dependencies
+```bash
+# Install Python dependencies
+pip3 install -r requirements.txt
+
+# Key dependencies:
+# - psutil (7.0.0): System metrics collection
+# - PyYAML (6.0.2): Configuration file parsing  
+# - requests (2.32.4): HTTP API communication
+# - python-dateutil (2.9.0): Date/time parsing for logs
+# - pyinstaller (6.14.1): Binary packaging
 ```
 
 ## Architecture
@@ -88,14 +124,40 @@ The socket server accepts JSON commands:
 - `{"command": "restart", "service": "nginx"}` - Restart service
 - `{"command": "enable", "service": "nginx"}` - Enable service
 - `{"command": "disable", "service": "nginx"}` - Disable service
+- `{"command": "logs_stream", "service": "nginx"}` - Start real-time log streaming
+- `{"command": "logs_stop", "stream_id": "optional"}` - Stop log streaming (all streams if no ID)
+
+### Real-time Log Streaming
+
+The agent supports real-time log streaming via `journalctl -u <service> -f --output=json`. When backend opens the logs view, it sends a `logs_stream` command to spawn journalctl and stream output back to backend in real-time.
+
+**Usage:**
+```bash
+# Start streaming logs for a service
+echo '{"command": "logs_stream", "service": "devopin-agent"}' | socat - UNIX-CONNECT:./tmp/devopin_agent.sock
+
+# Test with the provided script
+python3 test_log_streaming.py --service devopin-agent
+
+# Stop streaming
+python3 test_log_streaming.py --stop
+```
+
+**Stream Response Format:**
+- `logs_stream_started` - Initial confirmation with stream_id
+- `logs_data` - Real-time log entries with JSON data from journalctl
+- `logs_stream_ended` - Stream termination notification
 
 ## Log Parsing Support
 
-The agent supports multiple log formats:
+The agent supports multiple log formats (implemented in core/parser.py):
 - **Laravel**: `[2024-01-15 10:30:45] production.ERROR: message {"context":"data"}`
 - **Django/Flask**: `2024-01-15 10:30:45,123 ERROR message [file.py:123]`
 - **Node.js**: `2024-01-15T10:30:45.123Z ERROR: message at Controller (file.js:123:45)`
 - **Python**: `2024-01-15 10:30:45,123 - ERROR - message`
+- **FastAPI**: Custom pattern with module and file information
+
+Each framework has specific regex patterns for extracting timestamp, level, message, and context information.
 
 ## API Integration
 
@@ -113,3 +175,26 @@ Data is sent in structured JSON format with timestamps, logs, system metrics, an
 - Command whitelist validation for socket commands
 - Input sanitization and timeout protection
 - No sensitive data logging
+- Systemd security hardening (NoNewPrivileges, PrivateTmp, ProtectSystem)
+
+## File Locations
+
+### Development
+- Socket: `./tmp/devopin_agent.sock`
+- Config: `config.yaml`
+- Logs: Console output
+
+### Production
+- Socket: `/run/devopin-agent/devopin-agent.sock`
+- Config: `/etc/devopin/config.yaml`
+- Binary: `/opt/devopin-agent/devopin-agent`
+- Logs: `/var/log/devopin/` and systemd journal
+- Data: `/var/lib/devopin-agent/`
+
+## Important Development Notes
+
+- The agent auto-detects production vs development environment based on file paths
+- Use mock systemctl scripts for development when systemd is not available
+- Configuration is fetched from backend API at runtime, local config.yaml provides defaults
+- Socket communication uses JSON format with command validation
+- All monitoring data includes timestamps and is structured for backend API consumption

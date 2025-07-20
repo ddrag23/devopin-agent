@@ -4,6 +4,8 @@ import threading
 import logging
 import os
 import subprocess
+import time
+import signal
 from pathlib import Path
 from typing import Dict, Any, Optional
 from .config import load_config
@@ -52,6 +54,8 @@ class AgentSocketServer:
         self.socket_path = socket_path
         self.server_socket = None
         self.is_running = False
+        self.active_streams = {}  # Track active log streams by client id
+        self.stream_lock = threading.Lock()
         self.command_handlers = {
             "start": self._handle_start_service,
             "stop": self._handle_stop_service,
@@ -59,6 +63,8 @@ class AgentSocketServer:
             "status": self._handle_status_check,
             "enable": self._handle_enable_service,
             "disable": self._handle_disable_service,
+            "logs_stream": self._handle_logs_stream,
+            "logs_stop": self._handle_logs_stop,
         }
     
     def start_server(self):
@@ -97,6 +103,14 @@ class AgentSocketServer:
     def stop_server(self):
         """Stop the socket server"""
         self.is_running = False
+        
+        # Stop all active log streams
+        with self.stream_lock:
+            stream_ids = list(self.active_streams.keys())
+            for stream_id in stream_ids:
+                stream_info = self.active_streams[stream_id]
+                self._stop_log_stream(stream_id, stream_info)
+        
         if self.server_socket:
             try:
                 self.server_socket.close()
@@ -150,8 +164,16 @@ class AgentSocketServer:
                 return
             
             # Execute command
-            response = self._execute_command(command_data)
-            self._send_response(client_socket, response)
+            command = command_data.get("command")
+            response = self._execute_command(command_data, client_socket)
+            
+            # For streaming commands, don't close socket immediately
+            if command == "logs_stream" and response.get("streaming"):
+                logger.info(f"Started streaming for command: {command}")
+                # Socket will be closed when stream ends
+                return
+            else:
+                self._send_response(client_socket, response)
             
         except Exception as e:
             logger.error(f"Error handling client: {e}")
@@ -159,7 +181,16 @@ class AgentSocketServer:
             self._send_response(client_socket, response)
         
         finally:
-            client_socket.close()
+            # Only close if not streaming
+            command = None
+            try:
+                command_data = json.loads(data) if 'data' in locals() else {}
+                command = command_data.get("command")
+            except:
+                pass
+            
+            if command != "logs_stream":
+                client_socket.close()
     
     def _send_response(self, client_socket, response: Dict[str, Any]):
         """Send response back to client"""
@@ -169,10 +200,11 @@ class AgentSocketServer:
         except Exception as e:
             logger.error(f"Error sending response: {e}")
     
-    def _execute_command(self, command_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_command(self, command_data: Dict[str, Any], client_socket=None) -> Dict[str, Any]:
         """Execute the received command"""
         command = command_data.get("command")
         service_name = command_data.get("service", "")
+        stream_id = command_data.get("stream_id", "")
         
         if not command:
             return {"success": False, "message": "No command specified"}
@@ -182,7 +214,13 @@ class AgentSocketServer:
             return {"success": False, "message": f"Unknown command: {command}"}
         
         try:
-            return handler(service_name)
+            # Special handling for streaming commands that need client socket
+            if command == "logs_stream":
+                return handler(service_name, client_socket)
+            elif command == "logs_stop":
+                return handler(stream_id)
+            else:
+                return handler(service_name)
         except Exception as e:
             logger.error(f"Error executing command {command}: {e}")
             return {"success": False, "message": f"Command execution failed: {str(e)}"}
@@ -294,6 +332,179 @@ class AgentSocketServer:
         else:
             # Check agent status
             return {"success": True, "message": "Devopin agent is running and responsive"}
+    
+    def _handle_logs_stream(self, service_name: str, client_socket=None) -> Dict[str, Any]:
+        """Handle real-time log streaming command"""
+        if not service_name:
+            return {"success": False, "message": "Service name required for log streaming"}
+        
+        if not client_socket:
+            return {"success": False, "message": "Client socket required for streaming"}
+        
+        try:
+            # Generate unique client ID
+            client_id = f"{service_name}_{int(time.time() * 1000)}"
+            
+            # Check if journalctl is available
+            try:
+                subprocess.run(["which", "journalctl"], check=True, capture_output=True)
+            except subprocess.CalledProcessError:
+                return {"success": False, "message": "journalctl command not available"}
+            
+            # Start journalctl process for real-time streaming
+            cmd = ["journalctl", "-u", service_name, "-f", "--output=json"]
+            
+            # Spawn journalctl process
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,  # Line buffered
+                universal_newlines=True
+            )
+            
+            # Store stream info
+            with self.stream_lock:
+                self.active_streams[client_id] = {
+                    "process": process,
+                    "service": service_name,
+                    "client_socket": client_socket,
+                    "start_time": time.time()
+                }
+            
+            # Send initial success response
+            initial_response = {
+                "success": True,
+                "message": f"Log streaming started for {service_name}",
+                "stream_id": client_id,
+                "command": "logs_stream_started"
+            }
+            client_socket.send((json.dumps(initial_response) + "\n").encode())
+            
+            # Start streaming thread
+            stream_thread = threading.Thread(
+                target=self._stream_logs_to_client,
+                args=(client_id, process, client_socket),
+                daemon=True
+            )
+            stream_thread.start()
+            
+            return {"success": True, "streaming": True, "stream_id": client_id}
+            
+        except Exception as e:
+            logger.error(f"Error starting log stream for {service_name}: {e}")
+            return {"success": False, "message": f"Failed to start log streaming: {str(e)}"}
+    
+    def _handle_logs_stop(self, stream_id: str | None = None) -> Dict[str, Any]:
+        """Handle stop log streaming command"""
+        try:
+            with self.stream_lock:
+                if stream_id:
+                    # Stop specific stream
+                    if stream_id in self.active_streams:
+                        stream_info = self.active_streams[stream_id]
+                        self._stop_log_stream(stream_id, stream_info)
+                        return {"success": True, "message": f"Log stream {stream_id} stopped"}
+                    else:
+                        return {"success": False, "message": f"Stream {stream_id} not found"}
+                else:
+                    # Stop all streams
+                    stopped_count = 0
+                    stream_ids = list(self.active_streams.keys())
+                    for sid in stream_ids:
+                        stream_info = self.active_streams[sid]
+                        self._stop_log_stream(sid, stream_info)
+                        stopped_count += 1
+                    
+                    return {"success": True, "message": f"Stopped {stopped_count} log streams"}
+                    
+        except Exception as e:
+            logger.error(f"Error stopping log streams: {e}")
+            return {"success": False, "message": f"Failed to stop log streaming: {str(e)}"}
+    
+    def _stream_logs_to_client(self, client_id: str, process: subprocess.Popen, client_socket):
+        """Stream journalctl output to client in real-time"""
+        try:
+            logger.info(f"Starting log stream for client {client_id}")
+            
+            while True:
+                # Check if process is still running
+                if process.poll() is not None:
+                    logger.info(f"journalctl process ended for client {client_id}")
+                    break
+                
+                # Check if stream still exists
+                with self.stream_lock:
+                    if client_id not in self.active_streams:
+                        logger.info(f"Stream {client_id} was stopped")
+                        break
+                
+                # Read line from journalctl
+                try:
+                    line = process.stdout.readline()
+                    if not line:
+                        time.sleep(0.1)
+                        continue
+                    
+                    # Send log line to client
+                    log_data = {
+                        "success": True,
+                        "command": "logs_data",
+                        "stream_id": client_id,
+                        "data": line.strip(),
+                        "timestamp": time.time()
+                    }
+                    
+                    message = json.dumps(log_data) + "\n"
+                    client_socket.send(message.encode())
+                    
+                except Exception as e:
+                    logger.error(f"Error reading/sending log data for {client_id}: {e}")
+                    break
+            
+        except Exception as e:
+            logger.error(f"Error in log streaming for {client_id}: {e}")
+        finally:
+            # Clean up stream
+            with self.stream_lock:
+                if client_id in self.active_streams:
+                    stream_info = self.active_streams[client_id]
+                    self._stop_log_stream(client_id, stream_info)
+            
+            # Send end message
+            try:
+                end_message = {
+                    "success": True,
+                    "command": "logs_stream_ended",
+                    "stream_id": client_id,
+                    "message": "Log streaming ended"
+                }
+                client_socket.send((json.dumps(end_message) + "\n").encode())
+            except:
+                pass
+    
+    def _stop_log_stream(self, client_id: str, stream_info: Dict[str, Any]):
+        """Stop a specific log stream"""
+        try:
+            process = stream_info["process"]
+            
+            # Terminate the journalctl process
+            if process.poll() is None:
+                process.terminate()
+                # Wait a bit for graceful termination
+                time.sleep(0.5)
+                if process.poll() is None:
+                    process.kill()
+            
+            # Remove from active streams
+            if client_id in self.active_streams:
+                del self.active_streams[client_id]
+            
+            logger.info(f"Stopped log stream {client_id} for service {stream_info['service']}")
+            
+        except Exception as e:
+            logger.error(f"Error stopping log stream {client_id}: {e}")
 
 
 # Global socket server instance
